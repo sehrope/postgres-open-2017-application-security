@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PostgresOpen SV 2017 - PostgreSQL Security for Application Developers</title>
+    <link rel="stylesheet" href="css/reveal.css">
+    <link rel="stylesheet" href="css/theme/blood.css">
+    <link rel="stylesheet" href="lib/css/zenburn.css">
+    <style>
+      .container {
+        display: flex;
+      }
+      .col {
+        flex: 1;
+      }
+      
+      ul.unstyled {
+        list-style: none;
+      }
+      
+      i.success-check:after {
+        content: '✔ ';
+        color: green;
+      }
+      
+      i.failure-x:after {
+        content: '✘ ';
+        color: red;
+      }
+    </style>
+    <script>
+      var link = document.createElement( 'link' );
+      link.rel = 'stylesheet';
+      link.type = 'text/css';
+      link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+      document.getElementsByTagName( 'head' )[0].appendChild( link );
+    </script>
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section>
+          <h3>PostgreSQL Security<br>for Application Developers</h3>
+          <p>PostgresOpen SV 2017</p>
+          <p><small>September 8th, 2017<br>Silicon Valley, CA</small></p>
+        </section>
+        <section>
+          <h3>DB Security<br>vs<br>User Security<br>vs<br>App Security</h3>
+        </section>
+        <section>
+          <h3>DB Security</h3><img src="img/db-security.svg">
+          <h4>Config + Authen + Authz +<br>Upgrades + Backups + More</h4>
+        </section>
+        <section>
+          <h3>User Security</h3><img src="img/user-security.svg">
+          <h4>Team Accessing DB<br>Authen, Authz, Audit ...</h4>
+          <p>(Check out <strong>JackDB</strong>)</p>
+        </section>
+        <section>
+          <h3>App Security</h3><img src="img/app-security.svg">
+          <h4>Clients talk to App<br>App talks to DB</h4>
+          <p>(Subject of this talk)</p>
+        </section>
+        <section>
+          <h3>About Me</h3>
+          <ul class="unstyled">
+            <li><strong>Sehrope Sarkuni</strong></li>
+            <li>
+              Founder of <strong>JackDB</strong>
+              (<strong>https://www.jackdb.com/</strong>)
+            </li>
+            <li>Contributor to <code>pgjdbc</code> (Java driver)</li>
+            <li>Contributor to <code>node-postgres</code> (Node.js driver)</li>
+            <li>Occasionally gives (<em>great</em>) advice on #postgresql</li>
+          </ul>
+        </section>
+        <section>
+          <h3>Good security is<br>like an onion</h3><img src="img/onion.jpg" height="300">
+          <p class="fragment strike" data-fragment-index="2">... it will make you cry</p>
+          <p class="fragment" data-fragment-index="2">... it has layers</p>
+        </section>
+        <section>
+          <h3>Defense in Depth</h3><img src="img/beaumaris.jpg" height="300">
+          <p>The more the merrier</p>
+          <p><small><em>(We're assuming there are crocodiles in the water too)    </em></small></p>
+        </section>
+        <section>
+          <h3>Principle of Least Privilege</h3><img src="img/baby-reaching-for-scissors.jpg" height="300">
+          <p>If you shouldn't be using it</p>
+          <p>... you shouldn't be access to use it</p>
+        </section>
+        <section>
+          <h3>App &hArr; Database</h3>
+          <h4>Types of Interactions</h4>
+          <ol>
+            <li>Read Data</li>
+            <li>Change Data</li>
+            <li>Change Structure</li>
+          </ol>
+        </section>
+        <section>
+          <h3>App &hArr; Database</h3>
+          <h4>Real World Account Separation</h4>
+          <h4>Level 1</h4>
+          <p>One account for <strong>everything</strong></p>
+        </section>
+        <section>
+          <h3>App &hArr; Database</h3>
+          <h4>Real World Account Separation</h4>
+          <h4>Level 2</h4>
+          <p>One account for <strong>read only</strong></p>
+          <p>One account for <strong>everything else</strong></p>
+        </section>
+        <section>
+          <h3>App &hArr; Database</h3>
+          <h4>Real World Account Separation</h4>
+          <h4>Level 3</h4>
+          <p>One account for <strong>read only</strong></p>
+          <p>One account for <strong>read / write</strong></p>
+          <p>One account for <strong>everything else</strong></p>
+          <p><small>("Sweet spot")</small></p>
+        </section>
+        <section>
+          <h3>App &hArr; Database</h3>
+          <h4>Real World Account Separation</h4>
+          <h4>Level 4+</h4>
+          <p>Multiple accounts for <strong>read only</strong></p>
+          <p>Multiple accounts for <strong>read / write</strong></p>
+          <p>Multiple accounts for <strong>other actions</strong></p>
+        </section>
+        <section>
+          <h3>Pretty Good™ Setup</h3>
+          <h4><em>Breakdown by DB Privilege</em></h4>
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>SELECT</th>
+                <th>INSERT<br>UPDATE<br>DELETE</th>
+                <th>CREATE<br>DROP<br>... <em>and more</em></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>app_read</code></td>
+                <td>✔</td>
+                <td></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><code>app_dml</code></td>
+                <td>✔</td>
+                <td>✔</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td><code>app</code></td>
+                <td>✔</td>
+                <td>✔</td>
+                <td>✔</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+        <section>
+          <h4>Create Users and the App Database</h4>
+          <pre><code class="sql">-- Create some users
+CREATE USER app_read WITH PASSWORD '1badPassword';
+CREATE USER app_dml WITH PASSWORD 'n0tRea11yS3cret';
+CREATE USER app WITH PASSWORD 'pl3aseChang3me!';
+
+-- Create our database
+CREATE DATABASE app WITH OWNER app;
+</code></pre>
+        </section>
+        <section>
+          <h3>Brief aside about passwords</h3>
+          <p>Aren't those passwords great?</p>
+          <p>They've got a letter <em>and</em> a number!</p>
+          <p>One of them even uses <em>special</em> characters!</p>
+        </section>
+        <section>
+          <h3>Guidelines for Application Database Passwords</h3>
+          <ul class="unstyled">
+            <li>Cryptographically random</li>
+            <li>Length = strength</li>
+            <li>Humans don't need to remember them</li>
+            <li>Humans should not need to know them</li>
+          </ul>
+          <p class="fragment"><strong>Rule of thumb: </strong><br><em>If it's easy enough to remember, you're doing it wrong.</em></p>
+        </section>
+        <section>
+          <h3>Generating Good<br>App Passwords</h3>
+          <pre><code class="bash">$ tr -dc A-Za-z0-9 < /dev/urandom | head -c 32; echo</code></pre><small>
+            <ul class="unstyled">
+              <li>... 62 choices per character</li>
+              <li>... with 32 characters in length</li>
+              <li>Gives us 62<small>32</small> choices &asymp; 2.27 x 10<small>57</small> &asymp; 2<small>190</small></li>
+            </ul></small><br><br>
+          <h5>Examples</h5>
+          <ul class="unstyled">
+            <li><code>2WVOlvMEQKLZaRhuqUou5KcY8Fek1JSd</code></li>
+            <li><code>Eejho56k7aqr5uP85JCq547DHhjXmjGk</code></li>
+            <li><code>la9cUwhYV8UO59d71m38adojvazWgtqV</code></li>
+          </ul>
+        </section>
+        <section>
+          <h3>Back to permissions...</h3>
+        </section>
+        <section>
+          <h4>Reset Default Permissions</h4>
+          <pre><code class="sql">-- Otherwise everybody can do everything in public
+REVOKE ALL ON SCHEMA public FROM public;
+
+-- ... but make sure everybody can list out objects in public
+GRANT USAGE ON SCHEMA public TO public;
+</code></pre>
+          <h4>GRANT Permissions to app_read</h4>
+          <pre><code class="sql">-- Let our READ user read from anything
+GRANT SELECT
+  ON ALL TABLES IN SCHEMA public
+  TO app_read;
+
+-- ... and make sure it can for anything we create later too
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT ON TABLES
+  TO app_read;
+</code></pre>
+        </section>
+        <section>
+          <h4>GRANT Permissions to app_dml</h4>
+          <pre><code class="sql">-- Let our DML user read and write everything
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON ALL TABLES IN SCHEMA public
+  TO app_dml;
+
+-- ... make sure it can for anything we create later too
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES
+  TO app_dml;
+</code></pre>
+        </section>
+        <section>
+          <h4>Nothing special to do for user app</h4>
+          <p>Owner of the database can do almost everything.</p>
+          <p>... but make sure the user is NOT a super user.</p>
+        </section>
+        <section data-transition="slide-in fade-out">
+          <h3>Provide DB Credentials<br>Via ENV Variables</h3>
+          <pre><code># Use to connect as app_read
+READ_DATABASE_URL="postgresql://app_read:1badPassword@..."</code></pre>
+          <pre><code># Use to connect as app_dml
+DML_DATABASE_URL="postgresql://app_dml:n0tRea11yS3cret@..."</code></pre>
+          <pre><code># Use to connect as app
+DDL_DATABASE_URL="postgresql://app_ddl:pl3aseChang3me@..."
+</code></pre>
+        </section>
+        <section data-transition="fade-in slide-out">
+          <h3>
+             But Provide Only<br>What You Need</h3>
+          <pre><code># Use to connect as app_read
+READ_DATABASE_URL="postgresql://app_read:1badPassword@..."</code></pre>
+          <pre><code># Use to connect as app_dml
+DML_DATABASE_URL="postgresql://app_dml:n0tRea11yS3cret@..."</code></pre>
+          <p>Our app doesn't need the app user</p>
+          <p>... so it should not have its credentials</p>
+        </section>
+        <section>
+          <h3>WWPPD</h3>
+          <h4>What Would Peter Parker Do?</h4><img src="img/spiderman-db-privs.png" height="383">
+        </section>
+        <section>
+          <h3>Bonus!<br>Security &hArr; Scale</h3>
+          <ul>
+            <li>Start with single cluster but easy scaling later</li>
+            <li>Access patterns match usage patterns</li>
+            <li>Direct read-only queries to replicas</li>
+            <li>Lower load on primary (only writes)</li>
+          </ul>
+        </section>
+        <section>
+          <h3>Scale Out Work Effort</h3>
+          <div class="container">
+            <div class="col">
+              <h5>With Good Security</h5><small>
+                <ol>
+                  <li>Add replica</li>
+                  <li>Update <code>READ_DATABASE_URL</code></li>
+                  <li>Bounce Application</li>
+                  <li>Look for place to grab a beer</li>
+                </ol></small>
+            </div>
+            <div class="col">
+              <h5>With No Security</h5><small>
+                <ol>
+                  <li>Add replica</li>
+                  <li>Analyze app source</li>
+                  <li>Worry about breaking something</li>
+                  <li>Look for a new job</li>
+                </ol></small>
+            </div>
+          </div>
+        </section>
+        <section>
+          <h3>Connecting to your database</h3>
+          <div class="container">
+            <div class="col"><img src="img/network-plug.jpg"></div>
+            <div class="col">
+              <p>Using a <strong>database driver</strong></p>
+              <p>Driver talks to DB server</p>
+              <p>Handles authentication</p>
+              <p>Presents a language-specific interface</p>
+            </div>
+          </div>
+        </section>
+        <section>
+          <h3>Types of Postgres Drivers</h3>
+          <div class="container">
+            <div class="col">
+              <p><strong>Built atop libpq</strong></p>
+              <ul>
+                <li>Written in C</li>
+                <li>Usually sys wide lib</li>
+                <li>Part of Postgres core</li>
+              </ul>
+            </div>
+            <div class="col">
+              <p><strong>Native</strong></p>
+              <ul>
+                <li>Non-C Language</li>
+                <li>No sys dependencies</li>
+                <li>Easier to hack<small><sup>*</sup></small></li>
+              </ul>
+            </div>
+          </div><br><small><em>*In the positive sense of the word </em></small>
+        </section>
+        <section>
+          <h3>Some Postgres Drivers</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Language</th>
+                <th>Driver Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>psycopg</td>
+                <td>Python</td>
+                <td>libpq</td>
+              </tr>
+              <tr>
+                <td>node-postgres</td>
+                <td>Node.js</td>
+                <td>libpq / Native</td>
+              </tr>
+              <tr>
+                <td>pgjdbc</td>
+                <td>Java</td>
+                <td>Native</td>
+              </tr>
+              <tr>
+                <td>lib/pq</td>
+                <td>Golang</td>
+                <td>Native</td>
+              </tr>
+              <tr>
+                <td>Rust-Postgres </td>
+                <td>Rust</td>
+                <td>Native</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+        <section>
+          <h3>PSA: Update Your Drivers</h3>
+          <h4>Regularly update your drivers</h4>
+          <ul>
+            <li>New Client Features</li>
+            <li>New Server Features</li>
+            <li>Performance Improvments</li>
+            <li><strong>Security Fixes</strong></li>
+          </ul>
+        </section>
+        <section>
+          <h3>PSA: Signup for Updates</h3>
+          <h4>Get notified of new updates</h4>
+          <ul>
+            <li>Postgres mailing list (pgsql-announce)</li>
+            <li>Driver specific lists (ex: pgsql-jdbc)</li>
+            <li>Driver specific GitHub notifications</li>
+          </ul>
+          <p><span>Keeping up to date with updates and security notifications</span><em>
+              <strike>requires hypervigilance</strike></em><span>&nbsp;</span><span>is table stakes.</span></p>
+        </section>
+        <section>
+          <h3>Who here uses<br>Node.js +<br>node-postgres?</h3>
+          <h4>(The pg NPM module)</h4>
+        </section>
+        <section>
+          <h4>So Node.js users saw this right?</h4><img src="img/node-postgres-security-bug.png">
+        </section>
+        <section>
+          <h3>Connecting to our DB</h3>
+        </section>
+        <section>
+          <h3>Transport Layer Security</h3><img src="img/secret-squirrel.jpg">
+          <p>Encrypting the wire between app and database</p>
+          <p>Also referred to as SSL</p>
+        </section>
+        <section>
+          <h3>Why SSL?</h3>
+          <h3 class="fragment">Eavesdropping<br>&amp;<br>Man-in-the-middle</h3>
+        </section>
+        <section>
+          <h3>Eavesdropping</h3>
+          <h4>Ability to listen in on conversation</h4><br>
+          <p>Alice:<em>"Hey Bob what's your ATM pin?"</em></p>
+          <p>Bob:<em>"1234!"</em></p>
+          <p>Eve is in the room and overhears everything</p>
+        </section>
+        <section>
+          <h3>MITM</h3>
+          <h4>Ability to replace the conversation</h4><br>
+          <p>Alice:<em>"Hey Eve, ask Bob if he needs anything."</em></p>
+          <p>Bob:<em>"Hey Eve, tell Alice I don't need anything."</em></p>
+          <p>Eve:<em>"Hey Alice, Bob said to give Eve $20."</em></p>
+          <p>Eve controls the room and replaces the conversation.</p>
+        </section>
+        <section data-transition="slide-in fade-out">
+          <h3>Should I use SSL?</h3><img src="img/ssl-flow-001.svg" width="400">
+          <p>(Full flow)</p>
+        </section>
+        <section data-transition="fade-in fade-out">
+          <h3>Should I use SSL?</h3><img src="img/ssl-flow-002.svg" width="400">
+          <p>(Simpler Flow)</p>
+        </section>
+        <section data-transition="fade-in slide-out">
+          <h3>Should I use SSL?</h3><img src="img/ssl-flow-003.svg" width="400">
+          <p>(Even Simpler Flow)</p>
+        </section>
+        <section>
+          <h3>libpq SSL Modes</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>SSL Mode</th>
+                <th>Eavesdrop Protection</th>
+                <th>MITM Protection</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>disable</td>
+                <td> </td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>allow</td>
+                <td>Maybe?</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>prefer</td>
+                <td>Maybe?</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>require</td>
+                <td>✔</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td>verify-ca</td>
+                <td>✔</td>
+                <td>✔</td>
+              </tr>
+              <tr>
+                <td>verify-full</td>
+                <td>✔</td>
+                <td>✔</td>
+              </tr>
+            </tbody>
+          </table><small><small><strong><a href="https://www.postgresql.org/docs/current/static/libpq-ssl.html#LIBPQ-SSL-PROTECTION">https://www.postgresql.org/docs/current/static/libpq-ssl.html#LIBPQ-SSL-PROTECTION</a></strong></small></small>
+        </section>
+        <section>
+          <h3>Real World SSL Modes</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>SSL Mode</th>
+                <th>Eavesdrop Protection</th>
+                <th>MITM Protection</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Off</td>
+                <td>Nope</td>
+                <td>Nope</td>
+              </tr>
+              <tr>
+                <td>What's SSL?</td>
+                <td>Maybe?</td>
+                <td>Not a chance</td>
+              </tr>
+              <tr>
+                <td>Yes</td>
+                <td>✔</td>
+                <td>Probably not</td>
+              </tr>
+              <tr>
+                <td>Yes and we've got an iCA too!</td>
+                <td>✔</td>
+                <td>✔</td>
+              </tr>
+            </tbody>
+          </table>
+          <p><small>iCA = Internal Certificate Authority</small></p>
+        </section>
+        <section>
+          <h3>How do I enable SSL<br>from _________?</h3>
+          <ul class="unstyled">
+            <li><code>Java</code></li>
+            <li><code>Python</code></li>
+            <li><code>Node.js</code></li>
+            <li><code>Ruby</code></li>
+            <li>...</li>
+          </ul>
+        </section>
+        <section>
+          <h3>PGJDBC (Java) SSL</h3>
+          <h4>SSL Connection Parameters  </h4><small>
+            <table>
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Use</th>
+                  <th>Default</th>
+                  <th>Example</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>ssl</code></td>
+                  <td>Whether to use SSL</td>
+                  <td><code>false</code></td>
+                  <td><code>true</code></td>
+                </tr>
+                <tr>
+                  <td><code>sslfactory</code></td>
+                  <td>SSL Socket Factory class</td>
+                  <td>None</td>
+                  <td><code>com.example.MySocketFactory</code></td>
+                </tr>
+                <tr>
+                  <td><code>sslfactoryarg</code></td>
+                  <td>Optional arg for factory</td>
+                  <td>None</td>
+                  <td><code>"foobar"</code></td>
+                </tr>
+              </tbody>
+            </table></small>
+        </section>
+        <section>
+          <h3>PGJDBC (Java) SSL</h3>
+          <h4>With Default JVM Certificate Validation</h4>
+          <pre><code class="java">String url = "jdbc:postgresql://" + host + ":" + port + "/";
+Properties props = new Properties();
+props.setProperty("user", username);
+props.setProperty("password", password);
+props.setProperty("databaseName", database);    
+// Enable SSL
+props.setProperty("ssl", "true");    
+try (Connection conn = DriverManager.getConnection(url, props)) {
+  // ...
+}</code></pre>
+          <ul class="unstyled">
+            <li> <i class="success-check"></i>Eavesdropping Protection</li>
+            <li><i class="success-check"></i>MITM Protection</li>
+          </ul>
+          <p class="fragment">... but never works out of the box</p>
+        </section>
+        <section>
+          <h3>PGJDBC (Java) SSL</h3>
+          <h4>Skipping Certificate Validation</h4>
+          <pre><code class="java">// Enable SSL
+props.setProperty("ssl", "true");
+
+// Override socket factory
+props.setProperty(
+    "sslfactory",
+    "org.postgresql.ssl.NonValidatingFactory");</code></pre>
+          <ul class="unstyled">
+            <li> <i class="success-check"></i>Eavesdropping Protection</li>
+            <li><i class="failure-x"></i>MITM Protection</li>
+          </ul>
+          <p>If you trust the network this is reasonably okay</p>
+        </section>
+        <section>
+          <h3>PGJDBC (Java) SSL</h3>
+          <h4>With Certificate Pinning</h4>
+          <pre><code class="java">// Enable SSL
+props.setProperty("ssl", "true");
+
+// Override socket factory
+props.setProperty(
+  "sslfactory",
+  "org.postgresql.ssl.SingleCertValidatingFactory");
+props.setProperty(
+  "sslfactoryarg",
+  "classpath:path/to/server.crt");</code></pre>
+          <ul class="unstyled">
+            <li> <i class="success-check"></i>Eavesdropping Protection</li>
+            <li><i class="success-check"></i>MITM Protection</li>
+          </ul>
+          <p>... and no JVM wide config required!</p>
+        </section>
+        <section>
+          <h3>Certificate Pinning</h3>
+          <ul>
+            <li>Client validates the server is the expected server</li>
+            <li>Pinned cert can be server's or any step of chain</li>
+            <li>Easier to use a root certificate / chain</li>
+            <li>Insulates from server certificate updates</li>
+          </ul>
+          <p>Ex: AWS provides a chain for all RDS databases.</p>
+          <p><small>(<a href="http://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html"><strong>http://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html</strong></a>)</small></p>
+        </section>
+        <section>
+          <h3>SCRAM Auth</h3>
+          <h4>Salted Challenge<br>Response Authentiation</h4>
+          <ul>
+            <li>Replaces MD5</li>
+            <li>Better than MD5</li>
+            <li>Server validation (in PostgreSQL 11?)</li>
+          </ul>
+        </section>
+        <section>
+          <h3>What's wrong with this?</h3>
+          <pre><code class="js">app.get('/stuff/:id/name', function(req, res, next) {
+  const id = req.params.id;
+  const sql = "SELECT name FROM stuff WHERE id = '" + id + "'";
+  const row = (await pool.query(sql)).rows[0];
+  return res.send(row.name);
+});</code></pre>
+          <p><small>(There's actually a couple of things wrong but one big one...)</small></p>
+        </section>
+        <section>
+          <h3>SQL Injection</h3>
+          <p>A malicious request:</p>
+          <pre><code>GET /stuff/'%0AUNION%20ALL%0ASELECT%20secret%0AFROM%20other_table%0AWHERE%20''%20%3D%20'/name</code></pre>
+          <p>Leads to executing arbitrary SQL:</p>
+          <pre><code class="sql">SELECT name FROM stuff WHERE id = ''
+UNION ALL
+SELECT secret
+FROM other_table
+WHERE '' = ''
+</code></pre>
+        </section>
+        <section>
+          <h3>SQL Injection</h3>
+          <p>Usually caused by generating SQL using user input</p>
+          <p>Damage ranges from <strong>bad</strong> to <strong>catastrophic</strong></p>
+          <p>... But it's easily avoided!</p>
+        </section>
+        <section>
+          <h3>SQL Injection</h3>
+          <h4>How to avoid</h4>
+          <ol>
+            <li>Use parameters</li>
+            <li>Never compose SQL as strings with user input</li>
+            <li class="fragment">... but if you do make sure to properly escape it</li>
+          </ol>
+        </section>
+        <section>
+          <h3>
+             Literals<br>vs<br>Identifiers</h3>
+        </section>
+        <section>
+          <h3>Literals</h3>
+          <h4>Values and constants</h4>
+          <p>Examples:</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Literal</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>'PostgresOpen SV'</code></td>
+                <td>A text string</td>
+              </tr>
+              <tr>
+                <td><code>2017</code></td>
+                <td>An integer</td>
+              </tr>
+              <tr>
+                <td><code>NULL</code></td>
+                <td>An unknown value</td>
+              </tr>
+            </tbody>
+          </table>
+          <p><i class="success-check"></i>Can be parameterized</p>
+          <p><small>(Except in <code>DO</code> blocks...)</small></p>
+        </section>
+        <section>
+          <h3>Identifiers</h3>
+          <h4>References to objects</h4>
+          <p>Examples:</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Identifier</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>account</code></td>
+                <td>Table</td>
+              </tr>
+              <tr>
+                <td><code>account_detail</code></td>
+                <td>View</td>
+              </tr>
+              <tr>
+                <td><code>pgcrypto.gen_random_bytes</code></td>
+                <td>Function</td>
+              </tr>
+            </tbody>
+          </table>
+          <p><i class="failure-x"></i>Cannot be parameterized</p>
+        </section>
+        <section>
+          <h3>Parameters Can Be Used<br>In Place Of Literals</h3>
+          <p><i class="success-check"></i>This works:</p>
+          <pre><code class="sql">SELECT *
+FROM some_table
+WHERE id = $1</code></pre>
+          <p><i class="failure-x"></i>This does not work:</p>
+          <pre><code class="sql">SELECT *
+FROM $1
+</code></pre>
+        </section>
+        <section>
+          <h3>Using Numbered<br>Parameters From Node.js<br><small>(Using node-postgres)</small></h3>
+          <p>Reference in SQL with <code>$1</code>, <code>$2</code>, ...</p>
+          <p>Specify as an array of values when executing SQL</p>
+          <pre><code class="java">const username = req.query.username;
+const sql = 'SELECT * FROM person WHERE username = $1';
+const row = (await pool.query(sql, [username])).rows[0];
+// Do stuff with row</code></pre><small>(Writing <code>SELECT *</code> is usually a bad idea but fits better on a slide)</small>
+        </section>
+        <section>
+          <h3>Numbered <br>Parameters From Java<br><small>(Using pgjdbc)</small></h3>
+          <p>Reference in SQL with <code>?</code> placeholders</p>
+          <p>Set values via <code>PreparedStatement.setXYZ(...)</code></p>
+          <pre><code class="java">String sql = "SELECT * FROM account WHERE id = ?";
+PreparedStatement stmt = conn.prepareStatement(sql);
+stmt.setString(1, id);
+ResultSet rs = stmt.executeQuery();
+// Do stuff with result set</code></pre><small><br>
+            <ul class="unstyled">
+              <li>Java parameter placeholders don't let you reuse parameters.</li>
+              <li>To reuse a parameter you must repeat it's value.</li>
+            </ul></small>
+        </section>
+        <section>
+          <h3>Using Named Parameters from Java<br><small>(Using Spring JDBC)</small></h3>
+          <pre><code class="java">NamedParameterJdbcTemplate namedParamTemplate = ...
+String sql =
+  "INSERT INTO conferences_ive_spoke_at " +
+  "(name, year) " +
+  "VALUES " +
+  "(:name, :year)";
+MapSqlParameterSource params = new MapSqlParameterSource();
+params.addValue("name", "Postgres Open SV");
+params.addValue("year", 2017);
+namedParamTemplate.update(sql, params);</code></pre><small><a href="https://docs.spring.io/spring/docs/current/javadoc-api/org/springframework/jdbc/core/namedparam/NamedParameterJdbcTemplate.html">https://docs.spring.io/spring/docs/current/javadoc-api/org/springframework/jdbc/core/namedparam/NamedParameterJdbcTemplate.html</a></small>
+        </section>
+        <section>
+          <h3>Escaping Identifiers<br>in Java</h3>
+          <p>Using <code>PGConnection.escapeIdentifier(...)</code></p>
+          <pre><code class="java">String tableName = ...
+PGConnection pgConn = (PGConnection) conn;
+String sql =
+  "SELECT * " +
+  "FROM " + pgConn.escapeIdentifier(tableName);
+ResultSet rs = stmt.executeQuery(sql);</code></pre>
+          <p><small>There's also <code>PGConnection.escapeLiteral(...)</code><br>... but you probably don't need it. Use parameters!</small></p>
+        </section>
+        <section>
+          <h3>Escaping Identifiers<br>(and more) in Node.js</h3>
+          <p>Using the <code>pg-format</code> module</p>
+          <pre><code class="js">const format = require('pg-format');
+const sql = format(
+  'SELECT *\nFROM %I\nWHERE my_col = %L\n%s',
+  'my_table',
+  34,
+  'LIMIT 10');</code></pre>
+          <p>Generates:</p>
+          <pre><code class="sql">SELECT *
+FROM my_table
+WHERE my_col = '34'
+LIMIT 10</code></pre>
+          <p><small><a href="https://github.com/datalanche/node-pg-format">https://github.com/datalanche/node-pg-format</a></small></p>
+        </section>
+        <section>
+          <h3>SQL Strings in Source Code</h3>
+          <ul class="unstyled">
+            <li>Lots of ways to avoid via ORMs and libraries</li>
+            <li>... but eventually you need write custom SQL</li>
+          </ul>
+          <p><strong>Rule of thumb:</strong><br><em>
+              If there's more than one column, relation, or WHERE
+              clause predicate then externalize it</em></p>
+        </section>
+        <section>
+          <h3>SQL Strings in Source Code</h3>
+          <p><i class="success-check"></i>Okay to inline:</p>
+          <pre><code class="sql">SELECT f.name FROM foo f WHERE f.id = :id</code></pre>
+          <p><i class="failure-x"></i>Not okay to inline</p>
+          <pre><code class="sql">SELECT
+  f.foo,
+  f.baz,
+  f.bam
+FROM foo f
+WHERE f.id = :id
+  AND f.baz BETWEEN :start AND :end
+</code></pre>
+        </section>
+        <section>
+          <h3>SQL Strings in Source Code</h3>
+          <p><i class="success-check"></i>Okay to inline:</p>
+          <pre><code class="java">String sql = "SELECT f.name FROM foo f WHERE f.id = :id";</code></pre>
+          <p><i class="failure-x"></i>Not okay to inline</p>
+          <pre><code class="java">String sql =
+  "SELECT\n" +
+  "  f.foo,\n" +
+  "  f.baz,\n" +
+  "  f.bam\n" +
+  "FROM foo f\n" +
+  "WHERE f.id = :id\n" +
+  "  AND f.baz BETWEEN :start AND :end\n"
+</code></pre>
+        </section>
+        <section>
+          <h3>Externalize With<br>A SQL Repo</h3>
+          <ul class="unstyled">
+            <li>Directory of .sql files</li>
+            <li>Each file is a single SQL statement</li>
+            <li>Can be a SELECT, INSERT, UPDATE, ...</li>
+            <li>Reference in app code via relative path</li>
+          </ul>
+          <pre><code class="bash">sehrope@skynet:~/model-t101$ find sql -type f
+sql/person/person-find-base.sql
+sql/person/person-find-by-id.sql
+sql/person/person-find-by-name.sql
+sql/person/person-insert.sql
+sql/person/person-update-email.sql
+sql/widget/widget-find-by-id.sql
+sql/widget/widget-find-by-person-id.sql
+sql/report/crazy-tps-report.sql
+</code></pre>
+        </section>
+        <section>
+          <h3>Externalize With<br>A SQL Repo</h3>
+          <p>Load a .sql file from Java:</p>
+          <pre><code class="java">String sql = sqlRepo.load("foo/foo-find-by-id");    
+</code></pre>
+          <p>Or from Node.js:</p>
+          <pre><code class="js">const sql = await sqlRepo.load("foo/foo-find-by-id");
+</code></pre>
+          <p>Or any other language ... it's literally just a file!</p>
+        </section>
+        <section>
+          <h3>Externalize With<br>A SQL Repo</h3>
+          <ul>
+            <li>Works best with named parameters</li>
+            <li>Proper SQL syntax highlighting</li>
+            <li>Polyglot friendly (same file in Node.js, Java, ...)</li>
+            <li><em>Much</em> prettier git diffs</li>
+            <li>Allows for static analysis of SQL</li>
+          </ul>
+        </section>
+        <section>
+          <h3>What could go<br>wrong with this?</h3>
+          <p><code>sql/foo/my-func.sql</code></p>
+          <pre><code class="sql">PERFORM foo_baz(:name)</code></pre>
+          <p><code>Foo.java</code></p>
+          <pre><code class="java">String name = ... // some user input
+
+NamedParameterJdbcTemplate namedParamTemplate = ...
+String sql = sqlRepo.load('foo/my-func');
+MapSqlParameterSource params = new MapSqlParameterSource();
+params.addValue("name", name);
+namedParamTemplate.update(sql, params);</code></pre>
+          <p><small>(Hint: You can't see it...)</small></p>
+        </section>
+        <section>
+          <h3>We don't know!</h3>
+          <h4>All depends on what <code>foo_baz</code> does</h4>
+        </section>
+        <section>
+          <h3>Summary</h3>
+          <ul>
+            <li>Minimize Privileges</li>
+            <li>Update Drivers</li>
+            <li>Use SSL</li>
+            <li>(Named) Parameters</li>
+            <li>Externalize SQL</li>
+          </ul>
+        </section>
+        <section>
+          <h3>Q&amp;A</h3><br><br>
+          <h5>Sehrope Sarkuni</h5>
+          <h5>sehrope@jackdb.com</h5>
+        </section>
+        <section>
+          <h3>Thank You!</h3>
+        </section>
+      </div>
+    </div>
+    <script src="lib/js/head.min.js"></script>
+    <script src="js/reveal.js"></script>
+    <script>
+      // More info https://github.com/hakimel/reveal.js#configuration
+      Reveal.initialize({
+        history: true,
+        slideNumber: 'c/t',
+        showSlideNumber: true,
+        // More info https://github.com/hakimel/reveal.js#dependencies
+        dependencies: [
+          { src: 'plugin/markdown/marked.js' },
+          { src: 'plugin/markdown/markdown.js' },
+          { src: 'plugin/notes/notes.js', async: true },
+          { src: 'plugin/highlight/highlight.js', async: true, callback: function() {
+            hljs.initHighlightingOnLoad();
+          } }
+        ]
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,1031 @@
+section
+  h3
+    | PostgreSQL Security
+    br
+    | for Application Developers
+  p PostgresOpen SV 2017
+  p: small
+    | September 8th, 2017
+    br
+    | Silicon Valley, CA
+
+section
+  h3
+    | DB Security
+    br
+    | vs
+    br
+    | User Security
+    br
+    | vs
+    br
+    | App Security
+
+section
+  h3
+    | DB Security
+  img(src='img/db-security.svg')
+  h4
+    | Config + Authen + Authz +
+    br
+    | Upgrades + Backups + More
+
+section
+  h3
+    | User Security
+  img(src='img/user-security.svg')
+  h4
+    | Team Accessing DB
+    br
+    | Authen, Authz, Audit ...
+  p (Check out <strong>JackDB</strong>)
+
+section
+  h3
+    | App Security
+  img(src='img/app-security.svg')
+  h4
+    | Clients talk to App
+    br
+    | App talks to DB
+  p (Subject of this talk)
+
+section
+  h3 About Me
+  ul.unstyled
+    li: strong Sehrope Sarkuni
+    li
+      | Founder of <strong>JackDB</strong>
+      | (
+      strong https://www.jackdb.com/
+      | )
+    li Contributor to <code>pgjdbc</code> (Java driver)
+    li Contributor to <code>node-postgres</code> (Node.js driver)
+    li Occasionally gives (<em>great</em>) advice on #postgresql
+
+section
+  h3
+    | Good security is
+    br
+    | like an onion
+  img(src='img/onion.jpg', height='300')
+  p.fragment.strike(data-fragment-index="2") ... it will make you cry
+  p.fragment(data-fragment-index="2") ... it has layers
+
+section
+  h3 Defense in Depth
+  img(src='img/beaumaris.jpg', height='300')
+  p
+    | The more the merrier
+  p
+    small: em (We're assuming there are crocodiles in the water too)    
+
+section
+  h3 Principle of Least Privilege
+  img(src='img/baby-reaching-for-scissors.jpg', height='300')
+  p
+    | If you shouldn't be using it
+  p
+    | ... you shouldn't be access to use it
+
+section
+  h3 App &hArr; Database
+  h4 Types of Interactions
+  ol
+    li Read Data
+    li Change Data
+    li Change Structure
+
+section
+  h3 App &hArr; Database
+  h4 Real World Account Separation
+  h4
+    | Level 1
+  p One account for <strong>everything</strong>
+
+section
+  h3 App &hArr; Database
+  h4 Real World Account Separation
+  h4
+    | Level 2
+  p One account for <strong>read only</strong>
+  p One account for <strong>everything else</strong>
+
+section
+  h3 App &hArr; Database
+  h4 Real World Account Separation
+  h4
+    | Level 3
+  p One account for <strong>read only</strong>
+  p One account for <strong>read / write</strong>
+  p One account for <strong>everything else</strong>
+  p: small ("Sweet spot")
+
+section
+  h3 App &hArr; Database
+  h4 Real World Account Separation
+  h4
+    | Level 4+
+  p Multiple accounts for <strong>read only</strong>
+  p Multiple accounts for <strong>read / write</strong>
+  p Multiple accounts for <strong>other actions</strong>
+ 
+section
+  h3 Pretty Good™ Setup
+  h4: em Breakdown by DB Privilege
+  table
+    thead
+      tr
+        th
+        th SELECT
+        th
+          | INSERT
+          br
+          | UPDATE
+          br
+          | DELETE
+        th
+          | CREATE
+          br 
+          | DROP
+          br
+          | ... <em>and more</em>
+    tbody
+      tr
+        td: code app_read
+        td ✔
+        td
+        td
+      tr
+        td: code app_dml
+        td ✔
+        td ✔
+        td
+      tr
+        td: code app
+        td ✔
+        td ✔
+        td ✔
+
+section
+  h4 Create Users and the App Database
+  pre
+    code.sql.
+      -- Create some users
+      CREATE USER app_read WITH PASSWORD '1badPassword';
+      CREATE USER app_dml WITH PASSWORD 'n0tRea11yS3cret';
+      CREATE USER app WITH PASSWORD 'pl3aseChang3me!';
+
+      -- Create our database
+      CREATE DATABASE app WITH OWNER app;
+
+section
+  h3 Brief aside about passwords
+  p Aren't those passwords great?
+  p They've got a letter <em>and</em> a number!
+  p One of them even uses <em>special</em> characters!
+
+section
+  h3 Guidelines for Application Database Passwords
+  ul.unstyled
+    li Cryptographically random
+    li Length = strength
+    li Humans don't need to remember them
+    li Humans should not need to know them
+  p.fragment
+    strong Rule of thumb: 
+    br
+    em If it's easy enough to remember, you're doing it wrong.
+
+section
+  h3
+    | Generating Good
+    br
+    | App Passwords
+  pre: code.bash.
+    $ tr -dc A-Za-z0-9 < /dev/urandom | head -c 32; echo
+  small
+    ul.unstyled
+      li ... 62 choices per character
+      li ... with 32 characters in length
+      li Gives us 62<small>32</small> choices &asymp; 2.27 x 10<small>57</small> &asymp; 2<small>190</small>
+  br
+  br
+  h5 Examples
+  ul.unstyled
+    li: code 2WVOlvMEQKLZaRhuqUou5KcY8Fek1JSd
+    li: code Eejho56k7aqr5uP85JCq547DHhjXmjGk
+    li: code la9cUwhYV8UO59d71m38adojvazWgtqV
+
+section
+  h3 Back to permissions...
+
+section
+  h4 Reset Default Permissions
+  pre: code.sql.
+    -- Otherwise everybody can do everything in public
+    REVOKE ALL ON SCHEMA public FROM public;
+    
+    -- ... but make sure everybody can list out objects in public
+    GRANT USAGE ON SCHEMA public TO public;
+
+  h4 GRANT Permissions to app_read
+  pre: code.sql.
+    -- Let our READ user read from anything
+    GRANT SELECT
+      ON ALL TABLES IN SCHEMA public
+      TO app_read;
+
+    -- ... and make sure it can for anything we create later too
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT SELECT ON TABLES
+      TO app_read;
+
+section
+  h4 GRANT Permissions to app_dml
+  pre: code.sql.
+    -- Let our DML user read and write everything
+    GRANT SELECT, INSERT, UPDATE, DELETE
+      ON ALL TABLES IN SCHEMA public
+      TO app_dml;
+
+    -- ... make sure it can for anything we create later too
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES
+      TO app_dml;
+
+section
+  h4 Nothing special to do for user app
+  p Owner of the database can do almost everything.
+  p
+    | ... but make sure the user is NOT a super user.
+
+section(data-transition='slide-in fade-out')
+  h3
+    | Provide DB Credentials
+    br
+    | Via ENV Variables
+  pre: code.
+      # Use to connect as app_read
+      READ_DATABASE_URL="postgresql://app_read:1badPassword@..."
+  pre: code.
+      # Use to connect as app_dml
+      DML_DATABASE_URL="postgresql://app_dml:n0tRea11yS3cret@..."
+  pre: code.
+      # Use to connect as app
+      DDL_DATABASE_URL="postgresql://app_ddl:pl3aseChang3me@..."
+
+section(data-transition='fade-in slide-out')
+  h3 
+    | But Provide Only
+    br
+    | What You Need
+  pre: code.
+    # Use to connect as app_read
+    READ_DATABASE_URL="postgresql://app_read:1badPassword@..."
+  pre: code.
+    # Use to connect as app_dml
+    DML_DATABASE_URL="postgresql://app_dml:n0tRea11yS3cret@..."
+  p Our app doesn't need the app user
+  p ... so it should not have its credentials
+
+section
+  h3 WWPPD
+  h4 What Would Peter Parker Do?
+  img(src='img/spiderman-db-privs.png', height='383')
+
+section
+  h3
+    | Bonus!
+    br
+    | Security &hArr; Scale
+  ul
+    li Start with single cluster but easy scaling later
+    li Access patterns match usage patterns
+    li Direct read-only queries to replicas
+    li Lower load on primary (only writes)
+
+section
+  h3 Scale Out Work Effort
+  .container
+    .col
+      h5 With Good Security
+      small
+        ol
+          li Add replica
+          li Update <code>READ_DATABASE_URL</code>
+          li Bounce Application
+          li Look for place to grab a beer
+    .col
+      h5 With No Security
+      small
+        ol
+          li Add replica
+          li Analyze app source
+          li Worry about breaking something
+          li Look for a new job
+
+section
+  h3 Connecting to your database
+  .container
+    .col
+      img(src='img/network-plug.jpg')
+    .col
+      p Using a <strong>database driver</strong>
+      p Driver talks to DB server
+      p Handles authentication
+      p Presents a language-specific interface
+
+section
+  h3 Types of Postgres Drivers
+  .container
+    .col
+      p: strong Built atop libpq
+      ul
+        li Written in C
+        li Usually sys wide lib
+        li Part of Postgres core
+    .col
+      p: strong Native
+      ul
+        li Non-C Language
+        li No sys dependencies
+        li Easier to hack<small><sup>*</sup></small>
+  br
+  small: em *In the positive sense of the word 
+
+section
+  h3 Some Postgres Drivers
+  table
+    thead
+      tr
+        th Name
+        th Language
+        th Driver Type
+    tbody
+      tr
+        td psycopg
+        td Python
+        td libpq
+      tr
+        td node-postgres
+        td Node.js
+        td libpq / Native
+      tr
+        td pgjdbc
+        td Java
+        td Native
+      tr
+        td lib/pq
+        td Golang
+        td Native
+      tr
+        td Rust-Postgres 
+        td Rust
+        td Native
+
+section
+  h3 PSA: Update Your Drivers
+  h4 Regularly update your drivers
+  ul
+    li New Client Features
+    li New Server Features
+    li Performance Improvments
+    li: strong Security Fixes
+
+section
+  h3 PSA: Signup for Updates
+  h4 Get notified of new updates
+  ul
+    li Postgres mailing list (pgsql-announce)
+    li Driver specific lists (ex: pgsql-jdbc)
+    li Driver specific GitHub notifications
+  p
+    span Keeping up to date with updates and security notifications
+    em: strike requires hypervigilance
+    span &nbsp;
+    span is table stakes.
+
+section
+  h3
+    | Who here uses
+    br
+    | Node.js +
+    br
+    | node-postgres?
+  h4 (The pg NPM module)
+
+section
+  h4 So Node.js users saw this right?
+  img(src='img/node-postgres-security-bug.png')
+
+section
+  h3 Connecting to our DB
+
+section
+  h3 Transport Layer Security
+  img(src='img/secret-squirrel.jpg')
+  p Encrypting the wire between app and database
+  p Also referred to as SSL
+
+section
+  h3 Why SSL?
+  h3.fragment
+    | Eavesdropping
+    br
+    | &amp;
+    br
+    | Man-in-the-middle
+
+section
+  h3 Eavesdropping
+  h4 Ability to listen in on conversation
+  br
+  p
+    | Alice:
+    em "Hey Bob what's your ATM pin?"
+  p
+    | Bob:
+    em "1234!"
+  p Eve is in the room and overhears everything
+
+section
+  h3 MITM
+  h4 Ability to replace the conversation
+  br
+  p
+    | Alice:
+    em "Hey Eve, ask Bob if he needs anything."
+  p
+    | Bob:
+    em "Hey Eve, tell Alice I don't need anything."
+  p
+    | Eve:
+    em "Hey Alice, Bob said to give Eve $20."
+  p Eve controls the room and replaces the conversation.
+
+section(data-transition='slide-in fade-out')
+  h3 Should I use SSL?
+  img(src='img/ssl-flow-001.svg', width='400')
+  p (Full flow)
+
+section(data-transition='fade-in fade-out')
+  h3 Should I use SSL?
+  img(src='img/ssl-flow-002.svg', width='400')
+  p (Simpler Flow)
+
+section(data-transition='fade-in slide-out')
+  h3 Should I use SSL?
+  img(src='img/ssl-flow-003.svg', width='400')
+  p (Even Simpler Flow)
+
+section
+  h3 libpq SSL Modes
+  table
+    thead
+      tr
+        th SSL Mode
+        th Eavesdrop Protection
+        th MITM Protection
+    tbody
+      tr
+        td disable
+        td 
+        td
+      tr
+        td allow
+        td Maybe?
+        td
+      tr
+        td prefer
+        td Maybe?
+        td
+      tr
+        td require
+        td ✔
+        td
+      tr
+        td verify-ca
+        td ✔
+        td ✔
+      tr
+        td verify-full
+        td ✔
+        td ✔
+  small: small: strong
+    a(href='https://www.postgresql.org/docs/current/static/libpq-ssl.html#LIBPQ-SSL-PROTECTION')
+      | https://www.postgresql.org/docs/current/static/libpq-ssl.html#LIBPQ-SSL-PROTECTION
+
+section
+  h3 Real World SSL Modes
+  table
+    thead
+      tr
+        th SSL Mode
+        th Eavesdrop Protection
+        th MITM Protection
+    tbody
+      tr
+        td Off
+        td Nope
+        td Nope
+      tr
+        td What's SSL?
+        td Maybe?
+        td Not a chance
+      tr
+        td Yes
+        td ✔
+        td Probably not
+      tr
+        td Yes and we've got an iCA too!
+        td ✔
+        td ✔
+  p: small iCA = Internal Certificate Authority
+
+section
+  h3
+    | How do I enable SSL
+    br
+    | from _________?
+  ul.unstyled
+    li: code Java
+    li: code Python
+    li: code Node.js
+    li: code Ruby
+    li ...
+
+section
+  h3 PGJDBC (Java) SSL
+  h4 SSL Connection Parameters  
+  small: table
+    thead
+      tr
+        th Parameter
+        th Use
+        th Default
+        th Example
+    tbody
+      tr
+        td: code ssl
+        td Whether to use SSL
+        td: code false
+        td: code true
+      tr
+        td: code sslfactory
+        td SSL Socket Factory class
+        td None
+        td: code com.example.MySocketFactory
+      tr
+        td: code sslfactoryarg
+        td Optional arg for factory
+        td None
+        td: code "foobar"
+
+section
+  h3 PGJDBC (Java) SSL
+  h4 With Default JVM Certificate Validation
+  pre: code.java.
+    String url = "jdbc:postgresql://" + host + ":" + port + "/";
+    Properties props = new Properties();
+    props.setProperty("user", username);
+    props.setProperty("password", password);
+    props.setProperty("databaseName", database);    
+    // Enable SSL
+    props.setProperty("ssl", "true");    
+    try (Connection conn = DriverManager.getConnection(url, props)) {
+      // ...
+    }
+  ul.unstyled
+    li 
+      i.success-check
+      | Eavesdropping Protection
+    li
+      i.success-check
+      | MITM Protection
+  p.fragment
+    | ... but never works out of the box
+
+section
+  h3 PGJDBC (Java) SSL
+  h4 Skipping Certificate Validation
+  pre: code.java.
+    // Enable SSL
+    props.setProperty("ssl", "true");
+
+    // Override socket factory
+    props.setProperty(
+        "sslfactory",
+        "org.postgresql.ssl.NonValidatingFactory");
+  ul.unstyled
+    li 
+      i.success-check
+      | Eavesdropping Protection
+    li
+      i.failure-x
+      | MITM Protection
+  p
+    | If you trust the network this is reasonably okay
+
+section
+  h3 PGJDBC (Java) SSL
+  h4 With Certificate Pinning
+  pre: code.java.
+    // Enable SSL
+    props.setProperty("ssl", "true");
+
+    // Override socket factory
+    props.setProperty(
+      "sslfactory",
+      "org.postgresql.ssl.SingleCertValidatingFactory");
+    props.setProperty(
+      "sslfactoryarg",
+      "classpath:path/to/server.crt");
+  ul.unstyled
+    li 
+      i.success-check
+      | Eavesdropping Protection
+    li
+      i.success-check
+      | MITM Protection
+  p
+    | ... and no JVM wide config required!
+
+section
+  h3 Certificate Pinning
+  ul
+    li Client validates the server is the expected server
+    li Pinned cert can be server's or any step of chain
+    li Easier to use a root certificate / chain
+    li Insulates from server certificate updates
+  p Ex: AWS provides a chain for all RDS databases.
+  p: small
+    | (
+    a(href='http://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html')
+      strong http://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html
+    | )
+
+section
+  h3 SCRAM Auth
+  h4
+    | Salted Challenge
+    br
+    | Response Authentiation
+  ul
+    li Replaces MD5
+    li Better than MD5
+    li Server validation (in PostgreSQL 11?)
+
+section
+  h3 What's wrong with this?
+  pre: code.js.
+    app.get('/stuff/:id/name', function(req, res, next) {
+      const id = req.params.id;
+      const sql = "SELECT name FROM stuff WHERE id = '" + id + "'";
+      const row = (await pool.query(sql)).rows[0];
+      return res.send(row.name);
+    });
+  p: small (There's actually a couple of things wrong but one big one...)
+
+section
+  h3 SQL Injection
+  p A malicious request:
+  pre: code.
+    GET /stuff/'%0AUNION%20ALL%0ASELECT%20secret%0AFROM%20other_table%0AWHERE%20''%20%3D%20'/name
+  p Leads to executing arbitrary SQL:
+  pre: code.sql.
+    SELECT name FROM stuff WHERE id = ''
+    UNION ALL
+    SELECT secret
+    FROM other_table
+    WHERE '' = ''
+
+section
+  h3 SQL Injection
+  p Usually caused by generating SQL using user input
+  p Damage ranges from <strong>bad</strong> to <strong>catastrophic</strong>
+  p ... But it's easily avoided!
+
+section
+  h3 SQL Injection
+  h4 How to avoid
+  ol
+    li Use parameters
+    li Never compose SQL as strings with user input
+    li.fragment ... but if you do make sure to properly escape it
+
+section
+  h3 
+    | Literals
+    br
+    | vs
+    br
+    | Identifiers
+
+section
+  h3 Literals
+  h4 Values and constants
+  p Examples:
+  table
+    thead
+      tr
+        th Literal
+        th Type
+    tbody
+      tr
+        td: code 'PostgresOpen SV'
+        td A text string
+      tr
+        td: code 2017
+        td An integer
+      tr
+        td: code NULL
+        td An unknown value
+  p
+    i.success-check
+    | Can be parameterized
+  p: small (Except in <code>DO</code> blocks...)
+
+section
+  h3 Identifiers
+  h4 References to objects
+  p Examples:
+  table
+    thead
+      tr
+        th Identifier
+        th Type
+    tbody
+      tr
+        td: code account
+        td Table
+      tr
+        td: code account_detail
+        td View
+      tr
+        td: code pgcrypto.gen_random_bytes
+        td Function
+  p
+    i.failure-x
+    | Cannot be parameterized
+
+section
+  h3
+    | Parameters Can Be Used
+    br
+    | In Place Of Literals
+  p
+    i.success-check
+    | This works:
+  pre: code.sql.
+    SELECT *
+    FROM some_table
+    WHERE id = $1
+  p
+    i.failure-x
+    | This does not work:
+  pre: code.sql.
+    SELECT *
+    FROM $1
+
+section
+  h3
+    | Using Numbered
+    br
+    | Parameters From Node.js
+    br
+    small (Using node-postgres)
+  p Reference in SQL with <code>$1</code>, <code>$2</code>, ...
+  p Specify as an array of values when executing SQL
+  pre: code.java.
+    const username = req.query.username;
+    const sql = 'SELECT * FROM person WHERE username = $1';
+    const row = (await pool.query(sql, [username])).rows[0];
+    // Do stuff with row
+  small
+    | (Writing <code>SELECT *</code> is usually a bad idea but fits better on a slide)
+
+section
+  h3
+    | Numbered 
+    br
+    | Parameters From Java
+    br
+    small (Using pgjdbc)
+  p Reference in SQL with <code>?</code> placeholders
+  p Set values via <code>PreparedStatement.setXYZ(...)</code>
+  pre: code.java.
+    String sql = "SELECT * FROM account WHERE id = ?";
+    PreparedStatement stmt = conn.prepareStatement(sql);
+    stmt.setString(1, id);
+    ResultSet rs = stmt.executeQuery();
+    // Do stuff with result set
+  small
+    br
+    ul.unstyled
+      li Java parameter placeholders don't let you reuse parameters.
+      li To reuse a parameter you must repeat it's value.
+
+section
+  h3
+    | Using Named Parameters from Java
+    br
+    small (Using Spring JDBC)
+  pre: code.java.
+      NamedParameterJdbcTemplate namedParamTemplate = ...
+      String sql =
+        "INSERT INTO conferences_ive_spoke_at " +
+        "(name, year) " +
+        "VALUES " +
+        "(:name, :year)";
+      MapSqlParameterSource params = new MapSqlParameterSource();
+      params.addValue("name", "Postgres Open SV");
+      params.addValue("year", 2017);
+      namedParamTemplate.update(sql, params);
+  small
+    a(href='https://docs.spring.io/spring/docs/current/javadoc-api/org/springframework/jdbc/core/namedparam/NamedParameterJdbcTemplate.html')
+      | https://docs.spring.io/spring/docs/current/javadoc-api/org/springframework/jdbc/core/namedparam/NamedParameterJdbcTemplate.html
+
+section
+  h3
+    | Escaping Identifiers
+    br
+    | in Java
+  p Using <code>PGConnection.escapeIdentifier(...)</code>
+  pre: code.java.
+      String tableName = ...
+      PGConnection pgConn = (PGConnection) conn;
+      String sql =
+        "SELECT * " +
+        "FROM " + pgConn.escapeIdentifier(tableName);
+      ResultSet rs = stmt.executeQuery(sql);
+  p: small
+    | There's also <code>PGConnection.escapeLiteral(...)</code>
+    br
+    | ... but you probably don't need it. Use parameters!
+
+section
+  h3
+    | Escaping Identifiers
+    br
+    | (and more) in Node.js
+  p Using the <code>pg-format</code> module
+  pre: code.js.
+    const format = require('pg-format');
+    const sql = format(
+      'SELECT *\nFROM %I\nWHERE my_col = %L\n%s',
+      'my_table',
+      34,
+      'LIMIT 10');
+  p Generates:
+  pre: code.sql.
+    SELECT *
+    FROM my_table
+    WHERE my_col = '34'
+    LIMIT 10
+  p: small
+    a(href='https://github.com/datalanche/node-pg-format')
+      | https://github.com/datalanche/node-pg-format
+
+section
+  h3 SQL Strings in Source Code
+  ul.unstyled
+    li Lots of ways to avoid via ORMs and libraries
+    li ... but eventually you need write custom SQL
+
+  p
+    strong Rule of thumb:
+    br
+    em
+      | If there's more than one column, relation, or WHERE
+      | clause predicate then externalize it
+
+section
+  h3 SQL Strings in Source Code
+  p
+    i.success-check
+    | Okay to inline:
+  pre: code.sql.
+    SELECT f.name FROM foo f WHERE f.id = :id
+  p
+    i.failure-x
+    | Not okay to inline
+  pre: code.sql.
+    SELECT
+      f.foo,
+      f.baz,
+      f.bam
+    FROM foo f
+    WHERE f.id = :id
+      AND f.baz BETWEEN :start AND :end
+
+section
+  h3 SQL Strings in Source Code
+  p
+    i.success-check
+    | Okay to inline:
+  pre: code.java.
+    String sql = "SELECT f.name FROM foo f WHERE f.id = :id";
+  p
+    i.failure-x
+    | Not okay to inline
+  pre: code.java.
+    String sql =
+      "SELECT\n" +
+      "  f.foo,\n" +
+      "  f.baz,\n" +
+      "  f.bam\n" +
+      "FROM foo f\n" +
+      "WHERE f.id = :id\n" +
+      "  AND f.baz BETWEEN :start AND :end\n"
+
+section
+  h3
+    | Externalize With
+    br
+    | A SQL Repo
+  ul.unstyled
+    li Directory of .sql files
+    li Each file is a single SQL statement
+    li Can be a SELECT, INSERT, UPDATE, ...
+    li Reference in app code via relative path
+  pre: code.bash.
+    sehrope@skynet:~/model-t101$ find sql -type f
+    sql/person/person-find-base.sql
+    sql/person/person-find-by-id.sql
+    sql/person/person-find-by-name.sql
+    sql/person/person-insert.sql
+    sql/person/person-update-email.sql
+    sql/widget/widget-find-by-id.sql
+    sql/widget/widget-find-by-person-id.sql
+    sql/report/crazy-tps-report.sql
+
+section
+  h3
+    | Externalize With
+    br
+    | A SQL Repo
+  p Load a .sql file from Java:
+  pre: code.java.
+    String sql = sqlRepo.load("foo/foo-find-by-id");    
+
+  p Or from Node.js:
+  pre: code.js.
+    const sql = await sqlRepo.load("foo/foo-find-by-id");
+  
+  p Or any other language ... it's literally just a file!
+
+section
+  h3
+    | Externalize With
+    br
+    | A SQL Repo
+  ul
+    li Works best with named parameters
+    li Proper SQL syntax highlighting
+    li Polyglot friendly (same file in Node.js, Java, ...)
+    li <em>Much</em> prettier git diffs
+    li Allows for static analysis of SQL
+
+section
+  h3
+    | What could go
+    br
+    | wrong with this?
+  p: code sql/foo/my-func.sql
+  pre: code.sql.
+    PERFORM foo_baz(:name)
+  p: code Foo.java
+  pre: code.java.
+    String name = ... // some user input
+
+    NamedParameterJdbcTemplate namedParamTemplate = ...
+    String sql = sqlRepo.load('foo/my-func');
+    MapSqlParameterSource params = new MapSqlParameterSource();
+    params.addValue("name", name);
+    namedParamTemplate.update(sql, params);
+  p: small (Hint: You can't see it...)
+
+section
+  h3
+    | We don't know!
+  h4 All depends on what <code>foo_baz</code> does
+
+section
+  h3 Summary
+  ul
+    li Minimize Privileges
+    li Update Drivers
+    li Use SSL
+    li (Named) Parameters
+    li Externalize SQL
+
+section
+  h3 Q&amp;A
+  br
+  br
+  h5 Sehrope Sarkuni
+  h5 sehrope@jackdb.com
+
+section
+  h3 Thank You!
